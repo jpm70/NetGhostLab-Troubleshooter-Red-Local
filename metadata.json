@@ -1,0 +1,6 @@
+{
+  "name": "NetGhost Lab — Troubleshooter de Red Local",
+  "description": "Simulador interactivo de diagnóstico y resolución de problemas de configuración de red local (TCP/IP, subredes, puerta de enlace y DNS) por Un Fantasma en el Sistema.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
