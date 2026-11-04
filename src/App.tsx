@@ -76,6 +76,24 @@ export default function App() {
     }
   );
 
+  // Dictamen por caso: averías identificadas («equipo:avería») e intentos erróneos
+  const [diagnosisByScenario, setDiagnosisByScenario] = useState<
+    Record<string, { found: string[]; wrong: number }>
+  >({});
+  const recordDiagnosis = (scenarioId: string, foundKey: string | null) => {
+    setDiagnosisByScenario((prev) => {
+      const cur = prev[scenarioId] || { found: [], wrong: 0 };
+      return {
+        ...prev,
+        [scenarioId]: foundKey
+          ? { ...cur, found: cur.found.includes(foundKey) ? cur.found : [...cur.found, foundKey] }
+          : { ...cur, wrong: cur.wrong + 1 },
+      };
+    });
+  };
+  const resetDiagnosis = (scenarioId: string) =>
+    setDiagnosisByScenario((prev) => ({ ...prev, [scenarioId]: { found: [], wrong: 0 } }));
+
   const markScenarioSolved = (id: string) => {
     setSolvedScenarioIds((prev) => {
       const next = new Set(prev);
@@ -136,12 +154,20 @@ export default function App() {
     });
   }, [currentScenario.hosts, healthMap]);
 
-  // Automatically mark scenario solved when all hosts are repaired
+  // El caso se da por superado cuando se han identificado TODAS sus averías y la red funciona
+  const currentDiagnosis = diagnosisByScenario[currentScenario.id] || { found: [], wrong: 0 };
+  const allFaultsDiagnosed = currentScenario.expectedFaults.every((ef) =>
+    currentDiagnosis.found.includes(`${ef.hostId}:${ef.faultType}`)
+  );
   React.useEffect(() => {
-    if (isScenarioFullyRepaired) {
+    if (isScenarioFullyRepaired && allFaultsDiagnosed) {
       markScenarioSolved(currentScenario.id);
     }
-  }, [isScenarioFullyRepaired, currentScenario.id]);
+  }, [isScenarioFullyRepaired, allFaultsDiagnosed, currentScenario.id]);
+
+  // Los retos aleatorios no cuentan para el progreso de los 10 casos
+  const solvedFixedCount = SCENARIOS.filter((s) => solvedScenarioIds.has(s.id)).length;
+  const currentSolved = solvedScenarioIds.has(currentScenario.id);
 
   const historyKey = `${currentScenario.id}:${activeHost.id}`;
   const activeHistory = terminalHistories[historyKey] || [];
@@ -274,6 +300,7 @@ export default function App() {
     }
     setLastTrace(null);
     setRevealedHostIds(new Set());
+    resetDiagnosis(currentScenario.id);
   };
 
   const handleExportLabReport = () => {
@@ -282,12 +309,13 @@ export default function App() {
       `# Informe de Laboratorio — NetGhost Lab (Un Fantasma en el Sistema)`,
       `- **Fecha de generación:** ${dateStr}`,
       `- **Web de referencia:** https://www.unfantasmaenelsistema.com/`,
-      `- **Progreso global del alumno:** ${solvedScenarioIds.size}/${SCENARIOS.length} casos superados`,
+      `- **Progreso global del alumno:** ${solvedFixedCount}/${SCENARIOS.length} casos superados`,
       '',
       `## Escenario Activo: Caso ${currentScenario.number} — ${currentScenario.title}`,
       `- **Subtítulo:** ${currentScenario.subtitle}`,
       `- **Ticket de incidencia:** ${currentScenario.symptomReport}`,
       `- **Estado actual de la red:** ${isScenarioFullyRepaired ? '100% REPARADA Y OPERATIVA' : 'EN DIAGNÓSTICO / PENDIENTE DE REPARACIÓN'}`,
+      `- **Dictamen del alumno:** ${currentScenario.expectedFaults.filter((ef) => currentDiagnosis.found.includes(`${ef.hostId}:${ef.faultType}`)).length}/${currentScenario.expectedFaults.length} averías identificadas · ${currentDiagnosis.wrong} dictámenes erróneos`,
       '',
       `### Tabla de Configuración TCP/IPv4 Actual`,
       `| Dispositivo | Usuario / Rol | Dirección IPv4 | Máscara de Subred | Puerta de Enlace | Servidor DNS | Estado |`,
@@ -307,11 +335,15 @@ export default function App() {
     }
 
     lines.push('', '### Diagnóstico Esperado del Escenario');
-    for (const ef of currentScenario.expectedFaults) {
-      lines.push(
-        `- **Nodo afectado:** \`${ef.hostId}\` — **Fallo:** ${FAULT_LABELS[ef.faultType]}`,
-        `  - *Explicación técnica:* ${ef.explanation}`
-      );
+    if (currentSolved) {
+      for (const ef of currentScenario.expectedFaults) {
+        lines.push(
+          `- **Nodo afectado:** \`${ef.hostId}\` — **Fallo:** ${FAULT_LABELS[ef.faultType]}`,
+          `  - *Explicación técnica:* ${ef.explanation}`
+        );
+      }
+    } else {
+      lines.push('- *La solución se incluye en el informe cuando el caso está resuelto (dictamen completo y red reparada).*');
     }
 
     lines.push('', '### Registro de Comandos Ejecutados en el Escenario');
@@ -348,7 +380,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
       {/* Strict 3-Zone Top Navigation Bar */}
-      <header className="flex items-center justify-between gap-8 px-6 py-3.5 bg-slate-950/95 border-b border-slate-800/90 sticky top-0 z-30 backdrop-blur-md">
+      <header className="flex items-center justify-between gap-3 lg:gap-8 px-4 sm:px-6 py-3.5 bg-slate-950/95 border-b border-slate-800/90 sticky top-0 z-30 backdrop-blur-md">
         {/* Zone 1: Brand Title (One line) */}
         <a
           href="https://www.unfantasmaenelsistema.com/"
@@ -360,7 +392,6 @@ export default function App() {
             <img
               src="./assets/aistudio/icono_81a3db5b.png"
               alt="Logo Un Fantasma en el Sistema"
-              referrerPolicy="no-referrer"
               onError={() => setLogoLoadError(true)}
               className="w-8 h-8 object-contain rounded-md bg-slate-900/80 p-0.5 border border-slate-800"
             />
@@ -369,11 +400,12 @@ export default function App() {
               <Terminal className="w-4 h-4 text-sky-400" />
             </div>
           )}
-          <span>Un Fantasma en el Sistema</span>
+          <span className="hidden sm:inline">Un Fantasma en el Sistema</span>
+          <span className="sm:hidden">NetGhost Lab</span>
         </a>
 
         {/* Zone 2: 4 Concise Single-Line Navigation Links */}
-        <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-300">
+        <nav className="hidden lg:flex items-center gap-6 text-sm font-medium text-slate-300">
           <a
             href="#casos-practicos"
             className="hover:text-white hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
@@ -409,10 +441,11 @@ export default function App() {
           <button
             type="button"
             onClick={handleGenerateRandomCase}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-slate-950 bg-sky-500 hover:bg-sky-400 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 text-xs font-semibold text-slate-950 bg-sky-500 hover:bg-sky-400 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
           >
             <Shuffle className="w-3.5 h-3.5" />
-            <span>Nuevo Caso Aleatorio</span>
+            <span className="hidden sm:inline">Nuevo Caso Aleatorio</span>
+            <span className="sm:hidden">Aleatorio</span>
           </button>
         </div>
       </header>
@@ -432,7 +465,7 @@ export default function App() {
                 <span>Nivel: {currentScenario.difficulty}</span>
                 <span aria-hidden="true">·</span>
                 <span className="font-mono tabular-nums text-sky-400">
-                  Casos resueltos: {solvedScenarioIds.size}/{SCENARIOS.length}
+                  Casos resueltos: {solvedFixedCount}/{SCENARIOS.length}
                 </span>
               </div>
               <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
@@ -549,7 +582,8 @@ export default function App() {
               healthMap={healthMap}
               onUpdateHostConfig={handleUpdateHostConfig}
               onResetScenario={handleResetCurrentScenario}
-              onScenarioSolved={() => markScenarioSolved(currentScenario.id)}
+              onDiagnosis={(key) => recordDiagnosis(currentScenario.id, key)}
+              diagnosisProgress={currentDiagnosis}
               isScenarioFullyRepaired={isScenarioFullyRepaired}
               onExportReport={handleExportLabReport}
             />
@@ -565,7 +599,6 @@ export default function App() {
               <img
                 src="./assets/aistudio/icono_81a3db5b.png"
                 alt="Un Fantasma en el Sistema"
-                referrerPolicy="no-referrer"
                 onError={() => setLogoLoadError(true)}
                 className="w-6 h-6 object-contain"
               />
@@ -586,7 +619,7 @@ export default function App() {
           <div className="flex items-center gap-4">
             <span className="inline-flex items-center gap-1.5 text-slate-300 font-mono tabular-nums">
               <Award className="w-3.5 h-3.5 text-sky-400" />
-              Progreso del Alumno: {solvedScenarioIds.size}/{SCENARIOS.length}{' '}
+              Progreso del Alumno: {solvedFixedCount}/{SCENARIOS.length}{' '}
               escenarios superados
             </span>
           </div>

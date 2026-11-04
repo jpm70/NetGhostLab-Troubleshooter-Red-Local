@@ -29,6 +29,17 @@ export const DNS_RECORDS: Record<string, string> = {
   'one.one.one.one': '1.1.1.1',
 };
 
+/** Normaliza lo que escribe el alumno (quita http://, rutas y mayúsculas). */
+export function cleanDomainInput(raw: string): string {
+  return raw.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/[/:].*$/, '');
+}
+
+/** Resolución DNS de la simulación: registro A conocido o null (NXDOMAIN). */
+export function resolveDomain(raw: string): string | null {
+  const d = cleanDomainInput(raw);
+  return DNS_RECORDS[d] ?? DNS_RECORDS[`www.${d}`] ?? null;
+}
+
 // Known reachable external IPs in the WAN simulation
 export const REACHABLE_WAN_IPS = new Set<string>([
   '8.8.8.8',
@@ -371,6 +382,28 @@ function buildCapturedPackets(
     return packets;
   }
 
+  // El fallo está en el propio equipo (sin ruta, IP o máscara inválidas): no sale ninguna trama
+  if (!reachResult.reachable && reachResult.failedAtNodeId === source.id) {
+    packets.push({
+      id: `${baseId}-local`,
+      seq: 1,
+      timeOffsetMs: 0,
+      protocol,
+      srcMac: source.mac,
+      dstMac: '—',
+      srcIp: source.ip,
+      dstIp: targetIp,
+      ttl: 0,
+      length: 0,
+      info: `[Sin enviar] ${source.name} no tiene ruta hacia ${targetIp}`,
+      status: 'error',
+      layer2Detail: `Ninguna trama sale de la interfaz Ethernet0: la pila IPv4 descarta el paquete antes de enviarlo.`,
+      layer3Detail: `Causa de Capa 3: ${reachResult.reason}`,
+      layer4Detail: `El propio equipo responde «Host de destino inaccesible». Revisa su IP, máscara y puerta de enlace.`,
+    });
+    return packets;
+  }
+
   // Step 1: ARP Resolution for nextHopIp
   if (dstMac.startsWith('FF:FF:FF:FF')) {
     packets.push({
@@ -432,10 +465,7 @@ function buildCapturedPackets(
     });
 
     if (reachResult.reachable && isValidDnsServer(targetIp, router)) {
-      const resolved =
-        DNS_RECORDS[domainQuery || ''] ||
-        DNS_RECORDS[`www.${domainQuery || ''}`] ||
-        '185.199.108.153';
+      const resolved = resolveDomain(domainQuery || '');
       packets.push({
         id: `${baseId}-dns-r`,
         seq: 3,
@@ -447,11 +477,15 @@ function buildCapturedPackets(
         dstIp: source.ip,
         ttl: 56,
         length: 90,
-        info: `Standard query response 0x8f2a A ${domainQuery} -> ${resolved}`,
-        status: 'ok',
+        info: resolved
+          ? `Standard query response 0x8f2a A ${domainQuery} -> ${resolved}`
+          : `Standard query response 0x8f2a No such name A ${domainQuery}`,
+        status: resolved ? 'ok' : 'warn',
         layer2Detail: `Ethernet II, Src: ${dstMac}, Dst: ${source.mac}`,
         layer3Detail: `Internet Protocol Version 4, Src: ${targetIp}, Dst: ${source.ip}`,
-        layer4Detail: `DNS Answer: Registro Tipo A para ${domainQuery} = ${resolved} (TTL 3600s)`,
+        layer4Detail: resolved
+          ? `DNS Answer: Registro Tipo A para ${domainQuery} = ${resolved} (TTL 3600s)`
+          : `DNS Answer: RCODE 3 (NXDOMAIN). El servidor funciona, pero el nombre ${domainQuery} no existe.`,
       });
     } else {
       packets.push({
@@ -499,6 +533,26 @@ function buildCapturedPackets(
         ? `Transmission Control Protocol (TCP), Dst Port: 80/443 (HTTP/HTTPS)`
         : `Internet Control Message Protocol (ICMP Tipo 8: Echo Request)`,
   });
+
+  if (reachResult.reachable && reachResult.viaRouterHairpin) {
+    packets.push({
+      id: `${baseId}-redirect`,
+      seq: 3,
+      timeOffsetMs: 1.9,
+      protocol: 'ICMP',
+      srcMac: router.mac,
+      dstMac: source.mac,
+      srcIp: router.lanIp,
+      dstIp: source.ip,
+      ttl: 64,
+      length: 70,
+      info: `Redirect (Redirect for host) — usa ${targetIp} directamente`,
+      status: 'warn',
+      layer2Detail: `Ethernet II, Src: ${router.mac} (${router.name}), Dst: ${source.mac} (${source.name})`,
+      layer3Detail: `ICMP Tipo 5 (Redirect): el router reenvía el paquete por la misma interfaz LAN por la que entró y avisa de que el destino está en el mismo segmento.`,
+      layer4Detail: `Síntoma típico de una máscara mal configurada: el tráfico funciona, pero da un rodeo innecesario por el router.`,
+    });
+  }
 
   if (reachResult.reachable) {
     packets.push({
@@ -841,10 +895,7 @@ export function executeTerminalCommand(
       };
     }
 
-    const resolvedIp =
-      DNS_RECORDS[cleanDomain] ||
-      DNS_RECORDS[`www.${cleanDomain}`] ||
-      (cleanDomain.endsWith('.local') ? null : '93.184.216.34');
+    const resolvedIp = resolveDomain(cleanDomain);
 
     const dnsServerName =
       dnsToUse === router.lanIp
@@ -859,7 +910,19 @@ export function executeTerminalCommand(
           `Address:  ${dnsToUse}`,
           '',
           `*** ${dnsServerName} no puede encontrar ${cleanDomain}: Non-existent domain (NXDOMAIN)`,
+          '[El servidor DNS funciona: es el nombre el que no existe. Revisa cómo está escrito.]',
         ],
+        trace: {
+          id: `trace-${Date.now()}`,
+          timestamp: Date.now(),
+          sourceId: sourceHost.id,
+          targetInput: cleanDomain,
+          protocol: 'DNS',
+          pathNodeIds: pingCheckToDns.pathNodeIds,
+          status: 'dns_error',
+          summary: `NXDOMAIN: ${cleanDomain} no existe (respuesta de ${dnsToUse})`,
+          packets,
+        },
       };
     }
 
@@ -927,10 +990,7 @@ export function executeTerminalCommand(
       targetIp = router.lanIp;
       displayLabel = `${router.name} [${targetIp}]`;
     } else if (!isValidIp(targetRaw)) {
-      const cleanDomain = targetRaw
-        .toLowerCase()
-        .replace(/^https?:\/\//, '')
-        .replace(/\/.*$/, '');
+      const cleanDomain = cleanDomainInput(targetRaw);
       const dnsReachability = simulateIpReachability(
         sourceHost,
         sourceHost.dns,
@@ -970,10 +1030,28 @@ export function executeTerminalCommand(
         };
       }
 
-      targetIp =
-        DNS_RECORDS[cleanDomain] ||
-        DNS_RECORDS[`www.${cleanDomain}`] ||
-        '185.199.108.153';
+      const resolvedPing = resolveDomain(cleanDomain);
+      if (!resolvedPing) {
+        return {
+          status: 'error',
+          output: [
+            `La solicitud de ping no pudo encontrar el host ${cleanDomain}. Compruebe el nombre y vuelva a intentarlo.`,
+            `[El servidor DNS ${sourceHost.dns} responde, pero el nombre no existe (NXDOMAIN)]`,
+          ],
+          trace: {
+            id: `trace-${Date.now()}`,
+            timestamp: Date.now(),
+            sourceId: sourceHost.id,
+            targetInput: cleanDomain,
+            protocol: 'DNS',
+            pathNodeIds: dnsReachability.pathNodeIds,
+            status: 'dns_error',
+            summary: `NXDOMAIN: ${cleanDomain} no existe`,
+            packets: dnsPackets,
+          },
+        };
+      }
+      targetIp = resolvedPing;
       displayLabel = `${cleanDomain} [${targetIp}]`;
     }
 
@@ -1155,7 +1233,28 @@ export function executeTerminalCommand(
           },
         };
       }
-      targetIp = DNS_RECORDS[cleanDomain] || '185.199.108.153';
+      const resolvedTrace = resolveDomain(cleanDomain);
+      if (!resolvedTrace) {
+        return {
+          status: 'error',
+          output: [
+            `No se puede resolver el nombre del sistema de destino ${cleanDomain}.`,
+            `[El servidor DNS ${sourceHost.dns} responde, pero el nombre no existe (NXDOMAIN)]`,
+          ],
+          trace: {
+            id: `trace-${Date.now()}`,
+            timestamp: Date.now(),
+            sourceId: sourceHost.id,
+            targetInput: cleanDomain,
+            protocol: 'DNS',
+            pathNodeIds: dnsCheck.pathNodeIds,
+            status: 'dns_error',
+            summary: `tracert abortado: ${cleanDomain} no existe (NXDOMAIN)`,
+            packets: dnsPackets,
+          },
+        };
+      }
+      targetIp = resolvedTrace;
       displayHeader = `${cleanDomain} [${targetIp}]`;
     }
 
@@ -1245,6 +1344,58 @@ export function executeTerminalCommand(
       };
     }
 
+    if (reach.viaRouterHairpin) {
+      lines.push(
+        `  1     1 ms     1 ms     1 ms  router.lan.local [${router.lanIp}]`,
+        `  2    <1 ms    <1 ms    <1 ms  ${targetIp}`,
+        '',
+        'Traza completa.',
+        `[Rodeo innecesario: ${targetIp} está en la misma LAN, pero con la máscara ${sourceHost.mask} este equipo lo envía al router]`
+      );
+      return {
+        status: 'warn',
+        output: lines,
+        trace: {
+          id: `trace-${Date.now()}`,
+          timestamp: Date.now(),
+          sourceId: sourceHost.id,
+          targetInput: targetRaw,
+          resolvedIp: targetIp,
+          protocol: 'ICMP',
+          pathNodeIds: reach.pathNodeIds,
+          status: 'success',
+          summary: reach.reason,
+          packets,
+        },
+      };
+    }
+
+    if (!reach.reachable) {
+      lines.push(
+        `  1     1 ms     1 ms     1 ms  router.lan.local [${router.lanIp}]`,
+        `  2     *        *        *     Tiempo de espera agotado para esta solicitud.`,
+        `  3     *        *        *     Tiempo de espera agotado para esta solicitud.`,
+        `  [Diagnóstico de ruta: ${reach.reason}]`
+      );
+      return {
+        status: 'error',
+        output: lines,
+        trace: {
+          id: `trace-${Date.now()}`,
+          timestamp: Date.now(),
+          sourceId: sourceHost.id,
+          targetInput: targetRaw,
+          resolvedIp: targetIp,
+          protocol: 'ICMP',
+          pathNodeIds: reach.pathNodeIds,
+          failedAtNodeId: reach.failedAtNodeId,
+          status: reach.status,
+          summary: reach.reason,
+          packets,
+        },
+      };
+    }
+
     lines.push(
       `  1     1 ms     1 ms     1 ms  router.lan.local [${router.lanIp}]`,
       `  2     6 ms     5 ms     6 ms  isp-edge-gw.red.es [${router.ispGateway}]`,
@@ -1298,11 +1449,7 @@ export function simulateHttpBrowserRequest(
   cliLines: string[];
   trace: PacketTrace;
 } {
-  const cleanHost = rawUrl
-    .trim()
-    .toLowerCase()
-    .replace(/^https?:\/\//, '')
-    .replace(/\/.*$/, '');
+  const cleanHost = cleanDomainInput(rawUrl);
 
   // If cleanHost is not an IP, resolve via DNS first
   let targetIp = cleanHost;
@@ -1349,10 +1496,28 @@ export function simulateHttpBrowserRequest(
       };
     }
 
-    targetIp =
-      DNS_RECORDS[cleanHost] ||
-      DNS_RECORDS[`www.${cleanHost}`] ||
-      '185.199.108.153';
+    const resolvedHttp = resolveDomain(cleanHost);
+    if (!resolvedHttp) {
+      return {
+        ok: false,
+        errorCode: 'DNS_PROBE_FINISHED_NXDOMAIN',
+        title: `No se puede acceder a este sitio web (${cleanHost})`,
+        subtitle: `El servidor DNS (${sourceHost.dns}) ha respondido que ${cleanHost} no existe. Comprueba si el nombre está bien escrito.`,
+        cliLines: [`curl: (6) Could not resolve host: ${cleanHost}`, '[NXDOMAIN: el dominio no existe]'],
+        trace: {
+          id: `trace-${Date.now()}`,
+          timestamp: Date.now(),
+          sourceId: sourceHost.id,
+          targetInput: cleanHost,
+          protocol: 'DNS',
+          pathNodeIds: dnsReach.pathNodeIds,
+          status: 'dns_error',
+          summary: `NXDOMAIN: ${cleanHost} no existe`,
+          packets: dnsPackets,
+        },
+      };
+    }
+    targetIp = resolvedHttp;
   }
 
   const reach = simulateIpReachability(sourceHost, targetIp, allHosts, router);
@@ -1461,6 +1626,8 @@ export function simulateIpReachability(
   errorReporterIp?: string;
   pathNodeIds: string[];
   failedAtNodeId?: string;
+  /** El router reenvió el paquete de vuelta a la misma LAN (máscara del origen demasiado larga). */
+  viaRouterHairpin?: boolean;
 } {
   const cleanTarget = targetIp.trim();
 
@@ -1666,14 +1833,45 @@ export function simulateIpReachability(
     };
   }
 
-  const lanPeerAtTarget = allHosts.find((h) => h.ip.trim() === cleanTarget);
+  const lanPeers = allHosts.filter((h) => h.ip.trim() === cleanTarget);
+  if (lanPeers.length > 1) {
+    return {
+      reachable: false,
+      status: 'conflict',
+      reason: `La IP de destino ${cleanTarget} está duplicada entre ${lanPeers.map((h) => h.name).join(' y ')}.`,
+      pathNodeIds: [source.id, 'SWITCH', router.id, lanPeers[0].id],
+      failedAtNodeId: lanPeers[0].id,
+    };
+  }
+  const lanPeerAtTarget = lanPeers[0];
   if (lanPeerAtTarget) {
+    // El origen cree que el destino está en otra red y lo manda al router; el router, que
+    // sí lo tiene en su LAN, lo reenvía por la misma interfaz (y avisa con un ICMP Redirect).
+    const peer = lanPeerAtTarget;
+    const peerUsable =
+      isValidMask(peer.mask) &&
+      isHostIpUsableInSubnet(peer.ip, peer.mask) &&
+      isSameSubnet(peer.ip, router.lanIp, router.lanMask);
+    const peerRepliesDirect = peerUsable && isSameSubnet(peer.ip, source.ip, peer.mask);
+    const peerRepliesViaRouter =
+      peerUsable &&
+      peer.gateway.trim() === router.lanIp.trim() &&
+      isSameSubnet(peer.ip, router.lanIp, peer.mask);
+    if (peerRepliesDirect || peerRepliesViaRouter) {
+      return {
+        reachable: true,
+        status: 'success',
+        reason: `${source.name} (máscara ${source.mask}) cree que ${peer.name} (${cleanTarget}) está en otra red y envía el paquete a su puerta de enlace. El router, que sí lo tiene en su LAN, lo reenvía por la misma interfaz y avisa con un ICMP Redirect: funciona, pero dando un rodeo.`,
+        pathNodeIds: [source.id, 'SWITCH', router.id, peer.id],
+        viaRouterHairpin: true,
+      };
+    }
     return {
       reachable: false,
       status: 'timeout',
-      reason: `${source.name} (máscara ${source.mask}) consideró que el equipo local ${lanPeerAtTarget.name} (${cleanTarget}) estaba fuera de su subred y envió el paquete al Router en vez de directamente por el Switch.`,
-      pathNodeIds: [source.id, 'SWITCH', router.id],
-      failedAtNodeId: router.id,
+      reason: `El router reenvía el paquete de ${source.name} hasta ${peer.name}, pero ${peer.name} (máscara ${peer.mask}, puerta de enlace ${peer.gateway}) no tiene un camino válido para devolver la respuesta.`,
+      pathNodeIds: [source.id, 'SWITCH', router.id, peer.id],
+      failedAtNodeId: peer.id,
     };
   }
 
