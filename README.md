@@ -1,120 +1,124 @@
-<div align="center">
-  <a href="https://www.unfantasmaenelsistema.com/" target="_blank" rel="noopener noreferrer">
-    <img src="./public/assets/aistudio/icono_81a3db5b.png" alt="Logo Un Fantasma en el Sistema" width="110" height="110" />
-  </a>
+<p align="center">
+  <a href="https://www.unfantasmaenelsistema.com"><img src="public/assets/aistudio/icono_81a3db5b.png" width="110" alt="Un fantasma en el sistema"></a>
+</p>
 
-  # NetGhost Lab — Troubleshooter de Configuración de Red Local
+<h1 align="center">NetGhost Lab — Troubleshooter de Red Local</h1>
 
-  **Simulador interactivo de diagnóstico, análisis de tramas PDU y resolución de averías silenciosas en redes TCP/IPv4**
+<p align="center">
+  <b>Diagnostica y repara redes locales con fallos TCP/IPv4 reales, como en una oficina</b><br>
+  10 casos guiados + retos aleatorios · Consola con ipconfig, ping, tracert, nslookup, arp, route y curl · Analizador de tramas · Navegador de prueba · Inspector binario
+</p>
 
-  [![Un Fantasma en el Sistema](https://img.shields.io/badge/Web-unfantasmaenelsistema.com-0ea5e9?style=flat-square)](https://www.unfantasmaenelsistema.com/)
-  [![React 19](https://img.shields.io/badge/React-19-61dafb?style=flat-square&logo=react)](https://react.dev/)
-  [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
-  [![Tailwind CSS v4](https://img.shields.io/badge/Tailwind_CSS-v4-38bdf8?style=flat-square&logo=tailwindcss)](https://tailwindcss.com/)
-  [![GitHub Pages Ready](https://img.shields.io/badge/GitHub_Pages-Ready-10b981?style=flat-square&logo=github)](https://pages.github.com/)
-</div>
+<p align="center">
+  <a href="https://unfantasmaenelsistema.github.io/NetGhostLab-Troubleshooter-Red-Local/"><b>▶ Abrir NetGhost Lab</b></a> ·
+  <a href="#qué-hace">Qué hace</a> ·
+  <a href="#los-10-casos">Los 10 casos</a> ·
+  <a href="#cómo-se-supera-un-caso">Cómo se supera un caso</a> ·
+  <a href="#desarrollo">Desarrollo</a> ·
+  <a href="https://www.unfantasmaenelsistema.com">unfantasmaenelsistema.com</a> ·
+  <a href="LICENSE">MIT</a>
+</p>
 
----
+<p align="center">
+  <img src="https://img.shields.io/badge/navegador-sin_servidor-10b981?style=flat-square" alt="Sin servidor">
+  <img src="https://img.shields.io/badge/datos-100%25_locales-0284c7?style=flat-square" alt="Datos 100 % locales">
+  <img src="https://img.shields.io/badge/casos-10_%2B_aleatorios-f59e0b?style=flat-square" alt="10 casos y retos aleatorios">
+  <img src="https://img.shields.io/badge/licencia-MIT-blue?style=flat-square" alt="MIT">
+</p>
 
-## Descripción del Proyecto
+<p align="center">
+  <img src="docs/capturas/01-laboratorio.webp" width="900" alt="Caso 4: la topología con router, switch e Internet, las tarjetas de los cuatro equipos con su estado LAN, GW, WAN y DNS, la consola de PC-03 con un ping al NAS que responde y otro al router que falla, y el panel de diagnóstico">
+</p>
 
-**NetGhost Lab** es un laboratorio virtual interactivo diseñado para estudiantes y docentes de **Redes Locales, Sistemas Microinformáticos y Redes (SMR), Administración de Sistemas Informáticos en Red (ASIR), Desarrollo de Aplicaciones (DAM/DAW) y certificaciones de redes (CCNA / CompTIA Network+)**.
+Cada caso es una pequeña oficina (router, switch, cuatro equipos e Internet) con uno o varios fallos de configuración TCP/IPv4. Llega un ticket con lo que cuenta el usuario, y hay que hacer lo mismo que en un puesto de soporte: probar desde las consolas de los equipos, leer lo que pasa en el cable, decidir qué equipo falla y por qué, y corregir su configuración hasta que toda la red funcione.
 
-La aplicación presenta una topología realista con **4 equipos en red local (LAN)** conectados a un **Switch L2 Ethernet**, un **Router / Puerta de Enlace (Default Gateway)** y salida hacia **Internet WAN y servidores DNS públicos** (`8.8.8.8`, `1.1.1.1`, `www.unfantasmaenelsistema.com`).
+> [!NOTE]
+> Todo es una simulación que funciona en el navegador, sin servidor ni peticiones reales. El progreso se guarda solo en el `localStorage` de ese navegador.
 
-En cada escenario se introducen **fallos silenciosos de configuración TCP/IPv4** (puerta de enlace en otra subred, servidor DNS inexistente, conflicto ARP de IP duplicada, máscara de subred CIDR asimétrica `/25`, `/26`, `/28` o direcciones APIPA `169.254.x.x`). El alumno debe investigar el problema utilizando comandos reales en la consola virtual (`ipconfig`, `ping`, `tracert`, `nslookup`, `curl`, `arp -a`, `route print`), inspeccionar las tramas generadas en el **Analizador PDU (Mini-Wireshark)**, emitir su dictamen técnico y reparar la configuración TCP/IPv4.
+## Qué hace
 
----
+- **Consola de cada equipo**: `ipconfig` (y `/all`, `/flushdns`), `ping`, `tracert`, `nslookup` (con servidor opcional), `curl`, `arp -a` y `arp -d`, `route print`, `hostname`, `whoami`, `help` y `cls`, con salidas al estilo de Windows en español.
+- **Simulación realista de la ruta de ida y vuelta**: cada equipo decide con **su** máscara si el destino es local (ARP directo) o va a la puerta de enlace; se comprueba que el destino o el router puedan devolver la respuesta, se detectan conflictos de IP y, si el router tiene que reenviar tráfico entre dos equipos de su propia LAN, lo hace y avisa con un **ICMP Redirect**, como en una red real.
+- **Analizador de tramas (mini-Wireshark)**: ARP, ICMP, DNS y HTTP de cada comando, con el detalle de capa 2, 3 y 4. Si el paquete no puede salir del equipo, no aparece ninguna trama en el cable.
+- **DNS coherente**: el mismo nombre da la misma IP en `ping`, `tracert`, `nslookup` y el navegador; un dominio que no existe devuelve **NXDOMAIN** (distinto de un servidor DNS que no responde).
+- **Navegador de prueba** para comparar el acceso por nombre y por IP (`ERR_NAME_NOT_RESOLVED`, `DNS_PROBE_FINISHED_NXDOMAIN`, `ERR_ADDRESS_UNREACHABLE`…).
+- **Inspector binario** de 32 bits para ver qué bit separa dos subredes.
+- **Topología con modo docente o a ciegas**: a ciegas, el estado de un equipo solo se ve después de probar desde su consola.
+- **Informe en Markdown** con la configuración, el dictamen del alumno y todos los comandos ejecutados.
 
-## Capturas de Pantalla
+<p align="center">
+  <img src="docs/capturas/02-tramas-pdu.webp" width="900" alt="Analizador de tramas de PC-03: ARP y ping al NAS que funcionan, y un ping al router que no llega a salir del equipo, con la explicación por capas">
+</p>
 
-### 1. Mapa de Topología Interactiva LAN/WAN y Estado por Capas
-![Topología Interactiva de Red Local](./public/screenshots/01-topologia-interactiva.svg)
+## Los 10 casos
 
-### 2. Consola CLI Virtual, Analizador de Tramas PDU (Mini-Wireshark) y Navegador Web de Prueba
-![Consola CLI y Analizador de Tramas PDU](./public/screenshots/02-consola-wireshark-pdu.svg)
+| # | Caso | Nivel | Avería | Qué se aprende |
+| :-: | :-- | :-: | :-- | :-- |
+| 01 | Aislado del exterior | Básico | Puerta de enlace en otra subred | La puerta de enlace tiene que estar en la subred del equipo y ser el router. |
+| 02 | El falso corte de Internet | Básico | Servidor DNS inexistente | `ping 8.8.8.8` funciona y `nslookup` no: es DNS, no la conexión. |
+| 03 | Fantasmas en el switch | Intermedio | IP duplicada | Conflictos ARP con `arp -a`, `ipconfig /all` y el ARP gratuito. |
+| 04 | El muro invisible de la máscara | Intermedio | Máscara /25 en un equipo de la mitad alta | Con /25 el equipo solo ve su mitad de la red y su puerta de enlace queda fuera. |
+| 05 | Baile de octetos | Básico | IP en otra subred | Erratas en los octetos de red. |
+| 06 | Subredes corporativas /28 | Avanzado | Equipo fuera del bloque /28 | Bloques de 16 direcciones (útiles .1 a .14, broadcast .15). |
+| 07 | Guardia de viernes tarde | Avanzado | DNS y puerta de enlace en dos equipos | Dos averías independientes a la vez. |
+| 08 | El expediente APIPA | Intermedio | IP 169.254.x.x por fallo de DHCP | Reconocer la autoconfiguración APIPA (RFC 3927). |
+| 09 | El gateway impostor | Intermedio | Puerta de enlace apuntando a un servidor | La puerta de enlace es el router, no otro equipo que responde al ping. |
+| 10 | Auditoría crítica | Avanzado | IP duplicada + máscara /26 + DNS | Auditar y reparar toda la red. |
+| ∞ | Reto aleatorio | Variable | Una avería al azar | Practicar con direcciones nuevas (no cuenta para el progreso de los 10 casos). |
 
-### 3. Editor de Propiedades TCP/IPv4 en Vivo e Inspector Binario de Subred (32 bits)
-![Editor TCP/IPv4 e Inspector Binario](./public/screenshots/03-diagnostico-binario-tcpip.svg)
+<p align="center">
+  <img src="docs/capturas/03-diagnostico.webp" width="900" alt="Panel de diagnóstico del caso 7: dictamen correcto sobre el DNS de PC-01, 1 de 2 averías identificadas y el aviso de que queda una por identificar">
+</p>
 
----
+## Cómo se supera un caso
 
-## Características Didácticas Principales
+1. **Dictamen**: en «1. Diagnóstico» se elige el equipo y la causa raíz. Cada acierto cuenta como una avería identificada y cada fallo queda registrado como dictamen erróneo.
+2. **Reparación**: en «2. TCP/IPv4» se corrige la configuración del equipo.
+3. El caso queda **superado** cuando se han identificado **todas** sus averías y toda la red funciona (LAN, puerta de enlace, Internet y DNS en todos los equipos). Reparar sin diagnosticar, o diagnosticar sin reparar, no basta.
 
-1. **Motor Matemático IPv4 Real (32 bits)**:
-   - Cálculo bit a bit de dirección de red (`IP AND Máscara`), dirección de difusión (*Broadcast*), prefijo CIDR y rango de hosts útiles.
-   - Simulación auténtica de enrutamiento de ida y vuelta: comprueba si el origen ve al destino en su subred según su propia máscara y si el destino o el router pueden devolver los paquetes ICMP Echo Reply.
-2. **Consola de Comandos Interactiva (`NetGhost CLI`)**:
-   - Soporta `ipconfig`, `ipconfig /all`, `ipconfig /flushdns`, `ping <IP | dominio | host>`, `tracert <IP | dominio>`, `nslookup <dominio> [servidor_dns]`, `curl <url>`, `arp -a`, `arp -d *`, `route print`, `hostname`, `whoami`, `help` y `cls`.
-   - Incluye barra de comandos rápidos para agilizar las sesiones prácticas en aula o desde tablets.
-3. **Analizador de Tramas PDU (Mini-Wireshark)**:
-   - Captura en tiempo real las tramas `ARP`, `ICMP`, `DNS` y `HTTP` generadas al ejecutar comandos.
-   - Decodifica las **Capas OSI 2 (Ethernet II MAC Origen → MAC Destino)**, **Capa 3 (IPv4 Origen, Destino, TTL)** y **Capa 4/7 (ICMP / UDP Puerto 53 / HTTP)**, demostrando por qué la MAC de destino hacia Internet es siempre la MAC de la interfaz LAN del Router.
-4. **Navegador Web Integrado (Contraste DNS vs. IP Directa)**:
-   - Permite probar el acceso a `https://www.unfantasmaenelsistema.com` frente a la IP directa `http://185.199.108.153` o el panel del router (`http://192.168.1.1`), visualizando errores reales como `ERR_NAME_NOT_RESOLVED`, `ERR_ADDRESS_UNREACHABLE` o `ERR_CONNECTION_TIMED_OUT`.
-5. **Inspector Binario de Subredes (Operación Lógica `AND`)**:
-   - Muestra los 32 bits coloreados en **Porción de Red** y **Porción de Host**, comparando el equipo activo frente a cualquier IP de la topología para localizar exactamente qué bit separa dos subredes en máscaras `/24`, `/25`, `/26` o `/28`.
-6. **Modo Examen (IPs Ocultas) y Exportación de Informe (`.md`)**:
-   - El **Modo Examen** oculta los parámetros de las tarjetas de la topología obligando al estudiante a descubrir la configuración ejecutando `ipconfig` puesto por puesto.
-   - El botón **Exportar Informe (`.md`)** descarga un documento Markdown completo con la tabla TCP/IPv4, los casos superados y el historial de comandos ejecutados para entregar al profesor.
+El informe exportado incluye el dictamen del alumno (averías identificadas y errores) y solo muestra la solución esperada cuando el caso está superado.
 
----
+<p align="center">
+  <img src="docs/capturas/04-navegador-dns.webp" width="900" alt="Navegador de prueba del caso 2: ERR_NAME_NOT_RESOLVED porque el servidor DNS configurado no responde, con la sugerencia de probar por IP">
+</p>
 
-## Catálogo de los 10 Escenarios Guiados + Generador Aleatorio
+## Desarrollo
 
-| # | Escenario | Nivel | Fallo Silencioso Introducido | Objetivo de Aprendizaje |
-| :-: | :--- | :---: | :--- | :--- |
-| **01** | **Aislado del Exterior** | Básico | Puerta de enlace en otra subred (`192.168.2.1`) | Verificar que el *Default Gateway* pertenece a la subred local y coincide con la IP LAN del router. |
-| **02** | **El Falso Corte de Internet** | Básico | Servidor DNS inexistente (`192.168.10.250`) | Distinguir entre conectividad IP (`ping 8.8.8.8` OK) y resolución de nombres (`nslookup` / `ERR_NAME_NOT_RESOLVED`). |
-| **03** | **Fantasmas en el Switch** | Intermedio | Dirección IP duplicada (`10.0.0.15` en dos nodos) | Detectar colisiones ARP mediante `arp -a`, `ipconfig /all` y tramas *Gratuitous ARP*. |
-| **04** | **El Muro Invisible de la Máscara** | Intermedio | Máscara de subred `/25` (`255.255.255.128`) | Comprender cómo una máscara `/25` divide la red en dos bloques (`.1-.126` y `.129-.254`), aislando al servidor `.200`. |
-| **05** | **Baile de Octetos** | Básico | IP del host en otra subred (`172.16.100.11/24`) | Identificar errores tipográficos en los octetos de red mediante `ipconfig` y `route print`. |
-| **06** | **Subredes Corporativas /28** | Avanzado | Host fuera del rango CIDR `/28` (`255.255.255.240`) | Calcular bloques de 16 direcciones en subredes `/28` (rango útil `.1` a `.14`, broadcast `.15`). |
-| **07** | **Guardia de Viernes Tarde** | Avanzado | Doble fallo simultáneo (DNS + Gateway erróneo) | Diagnosticar incidencias independientes en múltiples equipos aplicando la metodología de 5 pasos. |
-| **08** | **El Expediente APIPA 169.254** | Intermedio | Autoconfiguración APIPA (`169.254.84.19/16`) | Reconocer el direccionamiento RFC 3927 asignado automáticamente cuando falla el servidor DHCP. |
-| **09** | **El Gateway Impostor** | Intermedio | Gateway apuntando a un servidor NAS (`.50`) | Comprobar que la puerta de enlace debe ser el router con salida WAN y no otro host local aunque responda al ping. |
-| **10** | **Auditoría Crítica de Sistemas** | Avanzado | Triple avería combinada (IP duplicada + `/26` + DNS) | Auditar y reparar una red corporativa completa hasta alcanzar el 100% de operatividad. |
-| **∞** | **Nuevo Caso Aleatorio** | Variable | Generador procedimental infinito | Practicar con nuevos direccionamientos y averías aleatorias en cada sesión. |
-
----
-
-## Instalación y Uso Local
-
-### Requisitos previos
-- **Node.js** 18+ (recomendado Node.js 20 o 22) y `npm`.
-
-### Pasos de ejecución
+Requisitos: Node.js 20 o superior.
 
 ```bash
-# 1. Clonar el repositorio
-git clone https://github.com/TU_USUARIO/troubleshooter-red-local.git
-cd troubleshooter-red-local
-
-# 2. Instalar dependencias
-npm install
-
-# 3. Iniciar el servidor de desarrollo (puerto 3000)
-npm run dev
-
-# 4. Generar el paquete estático de producción para GitHub Pages
-npm run build
+git clone https://github.com/unfantasmaenelsistema/NetGhostLab-Troubleshooter-Red-Local.git
+cd NetGhostLab-Troubleshooter-Red-Local
+npm ci
+npm run dev      # http://localhost:3000
+npm test         # 31 tests del motor de red y de los escenarios
+npm run lint     # comprobación de tipos
+npm run build    # versión estática en dist/
 ```
 
----
+Cada `push` a `main` pasa por el workflow [`deploy.yml`](.github/workflows/deploy.yml) (tipos, tests y build) y se publica en GitHub Pages. Los pull requests ejecutan las mismas comprobaciones sin publicar.
 
-## Despliegue en GitHub Pages
+```text
+src/
+├── utils/networkEngine.ts       Motor: salud de cada equipo, alcanzabilidad, comandos, tramas, DNS y navegador
+├── utils/networkEngine.test.ts  Tests (Vitest): los 10 casos, 500 retos aleatorios, DNS y tracert
+├── data/scenarios.ts            Los 10 casos y el generador aleatorio
+├── App.tsx                      Casos, dictamen, progreso e informe
+└── components/                  Topología, consola y analizador, panel de diagnóstico y metodología
+```
 
-El proyecto ya está configurado con `base: './'` en `vite.config.ts` y cuenta con el flujo de trabajo oficial en `.github/workflows/deploy.yml`:
+Para añadir un caso basta con un objeto más en `scenarios.ts`. Los tests comprueban que sus averías existen, que no hay otras sin querer y que, al repararlas, toda la red funciona.
 
-1. Sube este repositorio a tu cuenta de **GitHub** (rama `main` o `master`).
-2. En tu repositorio de GitHub, entra en **Settings → Pages**.
-3. En la sección **Build and deployment → Source**, selecciona **GitHub Actions**.
-4. Con cada `git push`, la acción compilará automáticamente la aplicación y la publicará en `https://TU_USUARIO.github.io/NOMBRE_DEL_REPO/`.
+## Novedades de la versión 2
 
----
+- **Un caso se daba por superado con acertar una sola avería**, aunque tuviera dos o tres (casos 7 y 10), y bastaba con reparar sin diagnosticar. Ahora hay que identificar todas y reparar la red; los dictámenes erróneos quedan registrados en pantalla y en el informe.
+- **El informe exportado mostraba la solución** aunque el caso no estuviera resuelto. Ahora solo la incluye al superarlo.
+- **Los casos de máscara (4 y 10) contaban un fallo que en una red real no ocurre**: un equipo con /25 o /26 en la mitad baja sí llega al resto de la LAN, porque el router reenvía el tráfico. Ahora el equipo está en la otra mitad de la red, su puerta de enlace queda fuera de su subred y el fallo es real. El motor simula el reenvío del router (con ICMP Redirect) y el generador aleatorio sigue la misma idea.
+- **DNS inventado**: cualquier dominio resolvía a la IP de la web con `ping` y el navegador, y a otra distinta con `nslookup`. Ahora todo usa el mismo resolutor y los dominios inexistentes dan NXDOMAIN.
+- **`tracert` daba la ruta por completada** hacia destinos que no respondían; ahora coincide con `ping`. El analizador ya no muestra tramas que nunca salen del equipo.
+- Los retos aleatorios no inflan el progreso de los 10 casos; las pistas citan los nombres reales de las pestañas.
+- Fuera dependencias sin uso (Gemini, Express) y las capturas dibujadas en SVG; se arregla la instalación con npm, el diseño ya no se desborda en móvil ni a 800 px, CSP en la build y licencia MIT.
 
-## Créditos y Autoría
+## Créditos y licencia
 
-Desarrollado con fines educativos para [**Un Fantasma en el Sistema**](https://www.unfantasmaenelsistema.com/).
-- **Sitio Web Oficial:** [https://www.unfantasmaenelsistema.com/](https://www.unfantasmaenelsistema.com/)
-- **Licencia:** Apache-2.0 / Uso educativo libre citando la fuente.
+Desarrollado para **[Un Fantasma en el Sistema](https://www.unfantasmaenelsistema.com)**. Distribuido bajo licencia [MIT](LICENSE).

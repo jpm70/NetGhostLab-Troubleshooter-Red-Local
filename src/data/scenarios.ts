@@ -251,9 +251,9 @@ export const SCENARIOS: Scenario[] = [
     difficulty: 'Intermedio',
     ticketSender: 'Elena V. (Desarrollo — PC-03)',
     symptomReport:
-      '«Mi equipo (PC-03) navega por Internet y hace ping al router sin problemas, pero me resulta imposible conectarme al servidor SRV-NAS (192.168.50.200). Mis compañeros sí pueden entrar al NAS.»',
+      '«Desde mi equipo (PC-03) entro sin problemas en el servidor SRV-NAS (192.168.50.200), pero no navego por Internet, no llego al router y no veo los equipos de mis compañeros. Ellos tampoco me ven a mí.»',
     learningObjective:
-      'Analizar en binario cómo una máscara de subred demasiado restrictiva (255.255.255.128 /25) divide una red Clase C en dos mitades (.1-.126 y .129-.254), impidiendo el tráfico directo hacia hosts de la mitad superior.',
+      'Analizar en binario cómo una máscara de subred demasiado restrictiva (255.255.255.128 /25) divide una red /24 en dos mitades (.1-.126 y .129-.254): el equipo solo considera locales a los de su mitad y su puerta de enlace (.1) queda fuera de su subred.',
     router: {
       id: 'ROUTER',
       name: 'Router-GW',
@@ -293,8 +293,8 @@ export const SCENARIOS: Scenario[] = [
         role: 'laptop',
         userLabel: 'Desarrollo (Elena)',
         mac: '00:1A:2B:DD:50:30',
-        ip: '192.168.50.30',
-        mask: '255.255.255.128', // SILENT FAULT: /25 mask only covers .1 to .126!
+        ip: '192.168.50.140',
+        mask: '255.255.255.128', // FALLO: con /25 su subred es .128/25 (.129-.254) y el router .1 queda fuera
         gateway: '192.168.50.1',
         dns: '8.8.8.8',
       },
@@ -315,12 +315,12 @@ export const SCENARIOS: Scenario[] = [
         hostId: 'PC-03',
         faultType: 'WRONG_SUBNET_MASK',
         explanation:
-          'PC-03 tiene máscara 255.255.255.128 (/25), cuyo rango llega solo hasta 192.168.50.126. Por eso ve al router (.1) y a PC-01/02 (.10, .20), pero cree que SRV-NAS (.200) está en otra red.',
+          'PC-03 (192.168.50.140) tiene máscara 255.255.255.128 (/25): para él su red es 192.168.50.128/25 (.129-.254). Llega directamente a SRV-NAS (.200), que está en esa mitad, pero el router (.1) y PC-01/02 (.10, .20) quedan en la otra, y su puerta de enlace está fuera de su subred, así que no puede salir de ella.',
       },
     ],
     hints: [
-      'Desde PC-03, prueba "ping 192.168.50.1" (funciona) y luego "ping 192.168.50.200" (falla).',
-      'Abre la pestaña "Inspector Binario" con PC-03 seleccionado y compáralo con 192.168.50.200 para ver el bit 25 que los separa.',
+      'Desde PC-03, prueba "ping 192.168.50.200" (funciona) y luego "ping 192.168.50.1" (falla). Mira también "route print": la puerta de enlace sale como inalcanzable.',
+      'Abre la pestaña "3. Binario" con PC-03 seleccionado y compara su IP con la del router (192.168.50.1): el bit 25 es distinto.',
       'Corrige la máscara de PC-03 a 255.255.255.0 (/24) para igualarla con el resto de la LAN.',
     ],
   },
@@ -649,7 +649,7 @@ export const SCENARIOS: Scenario[] = [
     hints: [
       'Ejecuta "ipconfig /all" en PC-03 y observa la dirección IPv4 que empieza por 169.254.x.x.',
       'Las direcciones 169.254.0.0/16 son direcciones APIPA (Automatic Private IP Addressing) y no permiten comunicarse con la subred 192.168.30.0/24.',
-      'En Propiedades TCP/IPv4 de PC-03, asigna la IP 192.168.30.12 y corrige también su máscara a 255.255.255.0.',
+      'En la pestaña "2. TCP/IPv4" de PC-03, asigna la IP 192.168.30.12 y corrige también su máscara a 255.255.255.0.',
     ],
   },
   {
@@ -741,7 +741,7 @@ export const SCENARIOS: Scenario[] = [
     difficulty: 'Avanzado',
     ticketSender: 'Dirección de TI — Auditoría Global',
     symptomReport:
-      '«Tras una migración de armario rack hay tres problemas simultáneos: PC-01 y PC-02 sufren cortes por conflicto en la red, PC-03 no ve al servidor .200 aunque sí navega, y SRV-NAS no logra resolver dominios externos para sus copias en la nube.»',
+      '«Tras una migración de armario rack hay tres problemas simultáneos: PC-01 y PC-02 sufren cortes por conflicto en la red, PC-03 no ve al servidor .200 ni navega, y SRV-NAS no logra resolver dominios externos para sus copias en la nube.»',
     learningObjective:
       'Auditar íntegramente todos los nodos de una red local corrigiendo conflictos ARP, máscaras de subred asimétricas y servidores DNS inválidos hasta lograr un 100% de operatividad.',
     router: {
@@ -783,8 +783,8 @@ export const SCENARIOS: Scenario[] = [
         role: 'laptop',
         userLabel: 'Auditoría Externa',
         mac: '00:1A:2B:64:10:12',
-        ip: '192.168.100.12',
-        mask: '255.255.255.192', // FAULT 2: /26 mask (.1 to .62) blocks reaching .200
+        ip: '192.168.100.70',
+        mask: '255.255.255.192', // FALLO 2: con /26 su red es .64/26 (.65-.126): router .1 y NAS .200 fuera
         gateway: '192.168.100.1',
         dns: '8.8.8.8',
       },
@@ -811,7 +811,7 @@ export const SCENARIOS: Scenario[] = [
         hostId: 'PC-03',
         faultType: 'WRONG_SUBNET_MASK',
         explanation:
-          'PC-03 tiene una máscara /26 (255.255.255.192) que solo abarca hasta .62, impidiéndole ver a SRV-NAS (.200). Debe ser 255.255.255.0.',
+          'PC-03 (192.168.100.70) tiene una máscara /26 (255.255.255.192): para él su red es 192.168.100.64/26 (.65-.126). El router (.1) y SRV-NAS (.200) quedan fuera, y como su puerta de enlace no está en su subred, no puede llegar a ellos ni navegar. Debe ser 255.255.255.0.',
       },
       {
         hostId: 'PC-04',
@@ -937,9 +937,10 @@ export function generateRandomScenario(seedCounter: number): Scenario {
       break;
     }
     case 'WRONG_SUBNET_MASK': {
+      victim.ip = `${basePrefix}.${140 + victimIndex}`;
       victim.mask = '255.255.255.128';
-      symptomReport = `«${victim.name} puede navegar por Internet, pero no logra conectarse al servidor SRV-NAS (${basePrefix}.200).»`;
-      explanation = `${victim.name} tiene una máscara /25 (255.255.255.128) que le impide ver el rango alto donde está SRV-NAS (.200).`;
+      symptomReport = `«${victim.name} solo llega al servidor SRV-NAS (${basePrefix}.200): no navega por Internet, no llega al router y no ve al resto de la oficina.»`;
+      explanation = `${victim.name} (${victim.ip}) tiene una máscara /25 (255.255.255.128): su red es ${basePrefix}.128/25, así que el router (.1) y los equipos de la mitad baja quedan fuera y su puerta de enlace está fuera de su subred.`;
       break;
     }
     case 'WRONG_SUBNET_IP': {

@@ -193,8 +193,8 @@ export const NetworkTopology: React.FC<NetworkTopologyProps> = ({
           </div>
 
           {/* Visual Switch Ports */}
-          <div className="my-2 py-2 px-3 rounded bg-slate-900/90 border border-slate-800/90 flex items-center justify-between gap-1.5">
-            <div className="flex items-center gap-1.5">
+          <div className="my-2 py-2 px-3 rounded bg-slate-900/90 border border-slate-800/90 flex flex-wrap items-center justify-between gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               {hosts.map((h, idx) => {
                 const isSelected = h.id === selectedHostId;
                 return (

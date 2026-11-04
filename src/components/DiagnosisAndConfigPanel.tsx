@@ -42,7 +42,9 @@ interface DiagnosisAndConfigPanelProps {
     updated: Pick<HostNode, 'ip' | 'mask' | 'gateway' | 'dns'>
   ) => void;
   onResetScenario: () => void;
-  onScenarioSolved: () => void;
+  /** Registra el dictamen: clave «equipo:avería» si es correcto, null si es erróneo. */
+  onDiagnosis: (foundKey: string | null) => void;
+  diagnosisProgress: { found: string[]; wrong: number };
   isScenarioFullyRepaired: boolean;
   onExportReport: () => void;
 }
@@ -65,7 +67,8 @@ export const DiagnosisAndConfigPanel: React.FC<
   healthMap,
   onUpdateHostConfig,
   onResetScenario,
-  onScenarioSolved,
+  onDiagnosis,
+  diagnosisProgress,
   isScenarioFullyRepaired,
   onExportReport,
 }) => {
@@ -136,12 +139,23 @@ export const DiagnosisAndConfigPanel: React.FC<
       const exp =
         matchedExpected ||
         scenario.expectedFaults.find((ef) => ef.faultType === 'DUPLICATE_IP')!;
+      const key = `${exp.hostId}:${exp.faultType}`;
+      const found = new Set([...diagnosisProgress.found, key]);
+      const total = scenario.expectedFaults.length;
+      const pending = total - scenario.expectedFaults.filter((ef) => found.has(`${ef.hostId}:${ef.faultType}`)).length;
       setDiagnosisFeedback({
         correct: true,
-        message: `¡Diagnóstico exacto! ${exp.explanation} Ahora puedes pasar a la pestaña «2. Propiedades TCP/IPv4» para corregir el parámetro y restablecer el servicio.`,
+        message: `¡Diagnóstico exacto! ${exp.explanation} ${
+          pending > 0
+            ? pending === 1
+              ? 'Queda 1 avería por identificar en este caso.'
+              : `Quedan ${pending} averías por identificar en este caso.`
+            : 'Has identificado todas las averías del caso. Corrígelas en la pestaña «2. TCP/IPv4» para cerrarlo.'
+        }`,
       });
-      onScenarioSolved();
+      onDiagnosis(key);
     } else {
+      onDiagnosis(null);
       const hostHasSomeFault = scenario.expectedFaults.some(
         (ef) => ef.hostId === suspectedHostId
       );
@@ -307,6 +321,13 @@ export const DiagnosisAndConfigPanel: React.FC<
               </strong>{' '}
               Todos los equipos tienen conectividad LAN, llegan al Gateway (
               {router.lanIp}) y resuelven dominios DNS sin conflictos.
+              {scenario.expectedFaults.some(
+                (ef) => !diagnosisProgress.found.includes(`${ef.hostId}:${ef.faultType}`)
+              ) && (
+                <span className="block mt-1 text-amber-200">
+                  Para dar el caso por resuelto, emite en «1. Diagnóstico» el diagnóstico de cada avería que has corregido.
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -393,6 +414,19 @@ export const DiagnosisAndConfigPanel: React.FC<
                 </button>
               </div>
             </form>
+
+            <div className="text-[11px] font-mono text-slate-400">
+              Averías identificadas:{' '}
+              <span className="text-slate-200">
+                {
+                  scenario.expectedFaults.filter((ef) =>
+                    diagnosisProgress.found.includes(`${ef.hostId}:${ef.faultType}`)
+                  ).length
+                }
+                /{scenario.expectedFaults.length}
+              </span>{' '}
+              · dictámenes erróneos: <span className="text-slate-200">{diagnosisProgress.wrong}</span>
+            </div>
 
             {diagnosisFeedback && (
               <div
